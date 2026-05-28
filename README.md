@@ -24,9 +24,14 @@
 | `Ctrl+Alt+T` | **T**ool 工具/模式循環：建立圖像 → 建立影片 → Canvas → Deep Research → 創作音樂 → 純文字 → 循環 |
 | `Ctrl+Alt+M` | **M**odel 模型循環：Flash-Lite → Flash → Pro → 循環 |
 | `Ctrl+Alt+E` | **E**ffort 努力程度循環：標準 → 延長 → 循環 |
+| `Ctrl+Alt+F` | **F**ocus 焦點到輸入框 |
 | `Ctrl+Alt+Q` | **Q**uery 朗讀當前狀態 |
 
 按下後 NVDA 會自動朗讀「已切換為 OOO」，聽到要的就停。
+
+注意：Gemini 的 + 選單會視帳號/狀態動態重組（例如「創作音樂」有時在主選單、有時在「更多工具」子選單）。
+腳本會自動雙路徑搜尋目標模式，無感處理。若 Gemini 在當前狀態完全不提供某個模式（如 Deep Research 對某些情境隱藏），
+T 鍵會朗讀失效訊息，Alice 可以再按一次 T 跳到下一個。
 
 ## 失效訊息
 

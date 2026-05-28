@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Gemini Accessibility Shortcuts (for Alice)
 // @namespace    https://github.com/jerryliutaipei/gemini-a11y
-// @version      0.1.1
-// @description  Ctrl+Alt 快捷鍵讓 NVDA 使用者快速操作 Gemini：U 上傳 / T 工具循環 / M 模型循環 / E 努力程度 / Q 朗讀狀態
+// @version      0.1.2
+// @description  Ctrl+Alt 快捷鍵讓 NVDA 使用者快速操作 Gemini：U 上傳 / T 工具循環 / M 模型循環 / E 努力程度 / F 聚焦輸入框 / Q 朗讀狀態
 // @author       Bob
 // @match        https://gemini.google.com/*
 // @grant        GM_setValue
@@ -134,14 +134,18 @@
     match: 'gemini.google.com',
     failureMessage: '可能 Gemini 改版，請聯絡 Bob',
 
-    /** 工具模式循環（按 Ctrl+Alt+T） */
+    /**
+     * 工具模式循環（按 Ctrl+Alt+T）。
+     * 注意：Gemini 的 + 選單會動態重組（不同帳號/狀態下，項目可能在主選單或「更多工具」子選單）。
+     * 所以這裡不再標 inMoreTools，actionCycleMode 會自動「先查主選單、再開更多工具子選單」雙路徑找。
+     */
     modeCycle: [
-      { key: 'image_create',  label: '建立圖像',      inMoreTools: false },
-      { key: 'movie',         label: '建立影片',      inMoreTools: false },
-      { key: 'canvas',        label: 'Canvas',       inMoreTools: false },
-      { key: 'deep_research', label: 'Deep Research', inMoreTools: false },
-      { key: 'music',         label: '創作音樂',      inMoreTools: true  },
-      { key: null,            label: '純文字',        inMoreTools: false },
+      { key: 'image_create',  label: '建立圖像' },
+      { key: 'movie',         label: '建立影片' },
+      { key: 'canvas',        label: 'Canvas' },
+      { key: 'deep_research', label: 'Deep Research' },
+      { key: 'music',         label: '創作音樂' },
+      { key: null,            label: '純文字' },
     ],
 
     /** 模型循環（按 Ctrl+Alt+M） */
@@ -178,6 +182,11 @@
 
     getMoreToolsButton: () =>
       document.querySelector('button[data-test-id="more-tools-button"]'),
+
+    /** 主輸入框（rich-textarea 內的 contenteditable div, role=textbox） */
+    getInputBox: () =>
+      document.querySelector('rich-textarea div[contenteditable="true"]') ||
+      document.querySelector('[role="textbox"][contenteditable="true"]'),
 
     getCurrentModeChip: () =>
       document.querySelector('gem-button[data-test-id="deselect-drawer-item-gem-button"]'),
@@ -314,21 +323,20 @@
     if (!plus) return fail();
     openCdkMenu(plus);
     if (!(await waitForPane())) return fail();
-    await sleep(150);
+    await sleep(200);
 
-    // 4) 若需要打開「更多工具」子選單
-    if (next.inMoreTools) {
+    // 4) 雙路徑找目標：先查主選單；若沒有，看是否有「更多工具」可開、再找一次
+    let target = A.findModeButtonByFonticon(next.key);
+    if (!target) {
       const moreBtn = A.getMoreToolsButton();
-      if (!moreBtn) {
-        closeMenus();
-        return fail();
+      if (moreBtn) {
+        moreBtn.click();
+        await sleep(300);
+        target = await waitFor(() => A.findModeButtonByFonticon(next.key), 800);
       }
-      moreBtn.click();
-      await sleep(250);
     }
 
-    // 5) 點目標模式
-    const target = await waitFor(() => A.findModeButtonByFonticon(next.key), 800);
+    // 5) 點目標模式（找不到 = Gemini 此狀態下沒這個模式，Alice 可再按 T 試下一個）
     if (!target) {
       closeMenus();
       return fail();
@@ -393,6 +401,16 @@
     announce(`已切換努力程度：${next.label}`);
   }
 
+  // --- Ctrl+Alt+F 焦點到輸入框 ---
+  function actionFocusInput() {
+    const input = A.getInputBox();
+    if (!input) return fail();
+    input.focus();
+    // NVDA 會自動讀出新焦點的 aria-label「請輸入 Gemini 提示詞」，
+    // 為了清楚仍補一句短訊息，避免在某些 NVDA 設定下沒讀到。
+    announce('已聚焦輸入框');
+  }
+
   // --- Ctrl+Alt+Q 朗讀當前狀態 ---
   function actionQueryState() {
     const model = A.getCurrentModel();
@@ -410,6 +428,7 @@
     t: actionCycleMode,
     m: actionCycleModel,
     e: actionCycleEffort,
+    f: actionFocusInput,
     q: actionQueryState,
   };
 
@@ -436,6 +455,6 @@
   );
 
   console.log(
-    '[Gemini-a11y v0.1.0] Loaded. Ctrl+Alt + U(上傳) / T(工具) / M(模型) / E(努力) / Q(狀態)'
+    '[Gemini-a11y v0.1.2] Loaded. Ctrl+Alt + U(上傳) / T(工具) / M(模型) / E(努力) / F(輸入框) / Q(狀態)'
   );
 })();
