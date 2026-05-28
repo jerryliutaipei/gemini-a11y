@@ -39,6 +39,27 @@ T 鍵會朗讀失效訊息，Alice 可以再按一次 T 跳到下一個。
 
 > 可能 Gemini 改版，請聯絡 Bob
 
+## 故障排除
+
+**症狀：按任何 Ctrl+Alt+ 快捷鍵完全沒反應、NVDA 也沒朗讀任何訊息**
+
+很可能是 **Tampermonkey 把腳本停用了**（更新失敗、Chrome 重啟、誤觸開關都可能造成）。
+
+自救步驟：
+
+1. 點 Chrome 右上角 Tampermonkey 圖示 → 「儀表板」
+2. 找「Gemini Accessibility Shortcuts (for Alice)」這條
+3. 看「啟用」欄的開關是不是綠色（開啟）
+4. 若是灰色，點一下開關打開
+5. 重新整理 Gemini 頁面
+6. 按 `Ctrl+Alt+Q`，應該朗讀「當前模型：⋯」
+
+若步驟 1-2 找不到這條腳本，可能是被誤刪了，請聯絡 Bob 重裝。
+
+**症狀：按 Ctrl+Alt+T 朗讀「可能 Gemini 改版，請聯絡 Bob」**
+
+腳本會自動跳過該狀態下不存在的模式（例如 Deep Research 有時不可用）。若整圈循環都失敗、才會聽到失效訊息——這時請聯絡 Bob。
+
 ## 架構
 
 腳本分三層，方便未來加 Claude / ChatGPT / YouTube 等網站：
