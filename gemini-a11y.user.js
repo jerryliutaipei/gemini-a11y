@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Gemini Accessibility Shortcuts (for Alice)
 // @namespace    https://github.com/jerryliutaipei/gemini-a11y
-// @version      0.1.2
+// @version      0.1.3
 // @description  Ctrl+Alt 快捷鍵讓 NVDA 使用者快速操作 Gemini：U 上傳 / T 工具循環 / M 模型循環 / E 努力程度 / F 聚焦輸入框 / Q 朗讀狀態
 // @author       Bob
 // @match        https://gemini.google.com/*
@@ -114,16 +114,23 @@
     return null;
   }
 
-  /** 關閉所有開啟的 CDK 選單 */
+  /**
+   * 關閉所有開啟的 CDK 選單。
+   * 用三種策略疊加（任一成功即可）：
+   *   1. 點 backdrop（Angular CDK overlay 的標準關閉路徑）
+   *   2. 對 active element dispatch Escape（focused trigger 通常會關閉）
+   *   3. 對 document dispatch Escape（保險）
+   */
   function closeMenus() {
-    document.dispatchEvent(
-      new KeyboardEvent('keydown', {
-        key: 'Escape',
-        code: 'Escape',
-        bubbles: true,
-        cancelable: true,
-      })
-    );
+    document.querySelectorAll('.cdk-overlay-backdrop').forEach((bd) => {
+      try { bd.click(); } catch (_) {}
+    });
+    const esc = new KeyboardEvent('keydown', {
+      key: 'Escape', code: 'Escape', keyCode: 27, which: 27,
+      bubbles: true, cancelable: true,
+    });
+    try { document.activeElement?.dispatchEvent(esc); } catch (_) {}
+    document.dispatchEvent(esc);
   }
 
   // =====================================================
@@ -290,59 +297,77 @@
   }
 
   // --- Ctrl+Alt+T 工具/模式循環 ---
+  // 設計重點：
+  // (a) Gemini + 選單動態重組——「更多工具」按鈕在某些狀態不存在、Deep Research 等項目可能消失
+  // (b) Alice 不該因為「Deep Research 不可用」就聽到失效訊息——應自動跳到下一個能用的
+  // (c) 失敗時務必關閉選單，避免下次 T 看到髒狀態
   async function actionCycleMode() {
-    const currentKey = A.getCurrentModeKey();
     const cycle = A.modeCycle;
-    let nextIdx;
-    if (currentKey === null) {
-      nextIdx = 0;
-    } else {
-      const idx = cycle.findIndex((m) => m.key === currentKey);
-      nextIdx = (idx + 1) % cycle.length;
-    }
-    const next = cycle[nextIdx];
+    const currentKey = A.getCurrentModeKey();
+    const startIdx = currentKey === null
+      ? cycle.length - 1   // 純文字當作最後一格，下一個 = 第 0 個 (image_create)
+      : cycle.findIndex((m) => m.key === currentKey);
 
     // 1) 取消舊模式（若有）
     if (currentKey !== null) {
       const chip = A.getCurrentModeChip();
-      const cancelBtn = chip?.querySelector('button');
-      if (cancelBtn) {
-        cancelBtn.click();
-        await sleep(250);
-      }
+      chip?.querySelector('button')?.click();
+      await sleep(250);
     }
 
-    // 2) 若下一站是「純文字」，已取消即完成
-    if (next.key === null) {
-      announce(`已切換為${next.label}`);
-      return;
-    }
-
-    // 3) 開 + 選單
-    const plus = A.getPlusButton();
-    if (!plus) return fail();
-    openCdkMenu(plus);
-    if (!(await waitForPane())) return fail();
-    await sleep(200);
-
-    // 4) 雙路徑找目標：先查主選單；若沒有，看是否有「更多工具」可開、再找一次
-    let target = A.findModeButtonByFonticon(next.key);
-    if (!target) {
-      const moreBtn = A.getMoreToolsButton();
-      if (moreBtn) {
-        moreBtn.click();
-        await sleep(300);
-        target = await waitFor(() => A.findModeButtonByFonticon(next.key), 800);
-      }
-    }
-
-    // 5) 點目標模式（找不到 = Gemini 此狀態下沒這個模式，Alice 可再按 T 試下一個）
-    if (!target) {
+    // 2) 確保起始無遺留選單（避免 plus.click() 反而關掉舊選單）
+    if (document.querySelector('.cdk-overlay-pane')) {
       closeMenus();
-      return fail();
+      await sleep(200);
     }
-    target.click();
-    announce(`已切換為${next.label}`);
+
+    // 3) 從下一格起繞循環找「能用」的模式
+    let menuOpen = false;
+    let triedMoreTools = false;
+
+    for (let step = 1; step <= cycle.length; step++) {
+      const candidate = cycle[(startIdx + step) % cycle.length];
+
+      // 純文字：不需要開選單，直接收尾
+      if (candidate.key === null) {
+        if (menuOpen) closeMenus();
+        announce(`已切換為${candidate.label}`);
+        return;
+      }
+
+      // 第一次需要選單時才開
+      if (!menuOpen) {
+        const plus = A.getPlusButton();
+        if (!plus) return fail();
+        plus.click();
+        if (!(await waitForPane())) return fail();
+        await sleep(200);
+        menuOpen = true;
+      }
+
+      // 找候選人
+      let target = A.findModeButtonByFonticon(candidate.key);
+      if (!target && !triedMoreTools) {
+        const moreBtn = A.getMoreToolsButton();
+        if (moreBtn) {
+          moreBtn.click();
+          await sleep(300);
+          triedMoreTools = true;
+          target = A.findModeButtonByFonticon(candidate.key);
+        }
+      }
+
+      if (target) {
+        target.click();
+        announce(`已切換為${candidate.label}`);
+        return;
+      }
+      // 找不到 → 跳過、繼續嘗試下一個（不再聲明失敗）
+    }
+
+    // 整圈都找不到（極端情況：Gemini 整個改版）
+    if (menuOpen) closeMenus();
+    return fail();
   }
 
   // --- Ctrl+Alt+M 模型循環 ---
@@ -455,6 +480,6 @@
   );
 
   console.log(
-    '[Gemini-a11y v0.1.2] Loaded. Ctrl+Alt + U(上傳) / T(工具) / M(模型) / E(努力) / F(輸入框) / Q(狀態)'
+    '[Gemini-a11y v0.1.3] Loaded. Ctrl+Alt + U(上傳) / T(工具) / M(模型) / E(努力) / F(輸入框) / Q(狀態)'
   );
 })();
