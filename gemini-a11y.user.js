@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Gemini Accessibility Shortcuts (for Alice)
 // @namespace    https://github.com/jerryliutaipei/gemini-a11y
-// @version      0.1.0
+// @version      0.1.1
 // @description  Ctrl+Alt 快捷鍵讓 NVDA 使用者快速操作 Gemini：U 上傳 / T 工具循環 / M 模型循環 / E 努力程度 / Q 朗讀狀態
 // @author       Bob
 // @match        https://gemini.google.com/*
@@ -223,13 +223,20 @@
       return this.modeCycle.find((m) => m.key === key)?.label || '未知模式';
     },
 
-    /** 當前模型 label（從 aria-label「目前為「Flash」模式」解析） */
+    /**
+     * 當前模型 label。
+     * Gemini 在努力程度為「延長」時，aria-label 會變成「目前為「Flash 延長」模式」，
+     * 直接取「」內整段會把努力程度也吃進來。改用 modelCycle 的 match function
+     * 反推（與 actionCycleModel 同一條邏輯），確保 Q 朗讀不重複講「延長」。
+     */
     getCurrentModel() {
       const btn = this.getModelMenuButton();
       const aria = btn?.getAttribute('aria-label') || '';
       const m = aria.match(/「(.+?)」/);
-      if (m) return m[1];
-      return (btn?.textContent || '').trim() || '未知';
+      const raw = m ? m[1] : (btn?.textContent || '').trim();
+      // 反查 modelCycle，找到匹配的乾淨 label
+      const hit = this.modelCycle.find((mc) => mc.match(raw));
+      return hit ? hit.label : (raw || '未知');
     },
 
     /** 努力程度從快取讀（DOM 無持續顯示） */
